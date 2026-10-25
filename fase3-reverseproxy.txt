@@ -1,0 +1,100 @@
+=====================================================================
+ LABORATORIO 2 - GESTIÓN DE SERVIDORES WEB
+ FASE 3 - REVERSE PROXY A EXPRESS
+ Estudiante: Wendy Yessenia Flores Reyes
+=====================================================================
+
+---------------------------------------------------------------------
+A. Comandos ejecutados
+---------------------------------------------------------------------
+# 3.1 Proyecto Express (PowerShell / CMD en Windows)
+mkdir C:\dulcehogar.api
+cd C:\dulcehogar.api
+npm init -y
+npm install express
+# index.js -> ver codigo/index.js
+
+# 3.3 Arrancar y probar
+node index.js
+curl "http://localhost:9090/api/saludo?nombre=Prueba"
+curl "http://localhost:9090/api/pedido?producto=pastel&cantidad=2"
+
+# 3.4 Firewall de Windows (PowerShell como Administrador)
+New-NetFirewallRule -DisplayName "Permitir WSL 9090" `
+  -Direction Inbound -LocalPort 9090 -Protocol TCP -Action Allow
+
+# 3.5 IP del host Windows desde WSL2
+ip route show | grep default
+#   default via 172.31.160.1 dev eth0      <- IP_HOST (cambiar si es otra)
+curl "http://172.31.160.1:9090/api/saludo?nombre=WSL"
+
+# 3.6 Virtual Host :8085 con proxy (versión de la Fase 3)
+#   <VirtualHost *:8085>
+#       ServerName dulcehogar.local
+#       DocumentRoot /var/www/dulcehogar.local
+#       ProxyPreserveHost On
+#       ProxyPass        /api http://172.31.160.1:9090/api
+#       ProxyPassReverse /api http://172.31.160.1:9090/api
+#       ErrorLog ${APACHE_LOG_DIR}/dulcehogar.local-error.log
+#       CustomLog ${APACHE_LOG_DIR}/dulcehogar.local-access.log combined
+#   </VirtualHost>
+
+# 3.7 Módulos y prueba
+sudo a2enmod proxy proxy_http
+sudo apache2ctl configtest
+sudo systemctl reload apache2       # la primera vez que se activan módulos: restart
+curl "http://dulcehogar.local:8085/api/saludo?nombre=Equipo"
+#   {"mensaje":"Hola, Equipo","desde":"dulcehogar:9090"}
+curl "http://dulcehogar.local:8085/api/pedido?producto=pastel&cantidad=2"
+#   {"pedidoId":"PED-17...","producto":"pastel","cantidad":"2","estado":"recibido"}
+
+
+---------------------------------------------------------------------
+B. Respuestas
+---------------------------------------------------------------------
+1. ¿Qué hace exactamente ProxyPass /api http://IP_HOST:9090/api?
+   Le dice a Apache que toda petición cuya ruta empiece con /api no la
+   busque en el DocumentRoot, sino que la reenvíe a Express en
+   IP_HOST:9090 conservando el resto de la ruta. Por ejemplo
+   /api/saludo?nombre=Equipo se convierte en
+   http://IP_HOST:9090/api/saludo?nombre=Equipo. Apache recibe la
+   respuesta de Express y se la devuelve al cliente, que nunca habla
+   directo con Node. ProxyPassReverse corrige las cabeceras de
+   redirección (Location) para que apunten a Apache y no a la IP
+   interna.
+
+2. ¿Por qué localhost desde WSL2 no llega al Express en Windows?
+   WSL2 es una máquina virtual ligera con su propia tarjeta de red
+   virtual y su propia IP. Dentro de WSL2, "localhost" es la misma VM
+   de Ubuntu, no Windows. Express corre en Windows, así que hay que
+   llegar por la IP del host (la puerta de enlace de la red virtual,
+   p. ej. 172.31.160.1), y además el firewall de Windows debe permitir
+   el puerto 9090.
+
+3. Reto: ¿qué pasa con ProxyPass /api http://IP_HOST:9090 (sin /api)?
+   Apache quita el prefijo /api y pega el resto a la URL de destino:
+   /api/saludo se convierte en http://IP_HOST:9090/saludo. Como en
+   Express la ruta es /api/saludo, Express responde 404
+   "Cannot GET /saludo". Lo probé y obtuve ese error; por eso el
+   destino debe terminar en /api igual que el prefijo.
+
+
+---------------------------------------------------------------------
+C. Errores encontrados y solución
+---------------------------------------------------------------------
+- 503 Service Unavailable al llamar /api por Apache. En el
+  dulcehogar.local-error.log aparecía "Connection refused" hacia
+  172.31.160.1:9090. Causas y soluciones:
+    a) Express no estaba corriendo -> ejecutar "node index.js".
+    b) Express escuchaba solo en localhost -> se cambió
+       app.listen(PORT, '0.0.0.0', ...) para aceptar conexiones de WSL.
+    c) Firewall de Windows bloqueaba -> regla New-NetFirewallRule 9090.
+       (En algunas PCs la red de WSL queda como "Pública"; la regla
+       creada aplica a todos los perfiles por defecto.)
+
+- "Invalid command 'ProxyPass'" en configtest: los módulos no estaban
+  activos. Solución: sudo a2enmod proxy proxy_http y restart.
+
+- La IP del host cambió después de reiniciar la PC. WSL2 asigna IP
+  nueva en cada arranque; se volvió a consultar con
+  "ip route show | grep default" y se actualizó el VHost.
