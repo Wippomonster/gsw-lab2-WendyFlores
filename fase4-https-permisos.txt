@@ -1,0 +1,137 @@
+=====================================================================
+ LABORATORIO 2 - GESTIÓN DE SERVIDORES WEB
+ FASE 4 - HTTPS CON MKCERT + PERMISOS + LOGS
+ Estudiante: Wendy Yessenia Flores Reyes
+=====================================================================
+
+---------------------------------------------------------------------
+A. Comandos ejecutados
+---------------------------------------------------------------------
+# 4.1 mkcert
+sudo apt update
+sudo apt install -y libnss3-tools wget
+wget -O mkcert https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64
+chmod +x mkcert
+sudo mv mkcert /usr/local/bin/mkcert
+mkcert -install                      # con guion
+
+# 4.2 Certificado
+mkcert dulcehogar.local
+sudo mkdir -p /etc/apache2/ssl/dulcehogar.local
+sudo mv dulcehogar.local.pem dulcehogar.local-key.pem /etc/apache2/ssl/dulcehogar.local/
+sudo chmod 600 /etc/apache2/ssl/dulcehogar.local/*.pem
+
+# 4.3 ports.conf -> Listen 4443 dentro de <IfModule ssl_module> (ver config/ports.conf)
+# 4.4 VHost HTTPS -> config/dulcehogar.local-ssl.conf
+# 4.5 VHost :8085 ahora redirige -> config/dulcehogar.local.conf
+
+# 4.6 Activar y verificar
+sudo a2enmod ssl headers
+sudo a2ensite dulcehogar.local-ssl.conf
+sudo apache2ctl configtest           # Syntax OK
+sudo systemctl restart apache2
+sudo ss -tlnp | grep apache2         # :80, :8085 y :4443
+curl -I https://dulcehogar.local:4443/     # HTTP/1.1 200 OK
+curl -I http://dulcehogar.local:8085/      # HTTP/1.1 301 -> https://dulcehogar.local:4443/
+
+# 4.7 CA en Windows
+cp $(mkcert -CAROOT)/rootCA.pem /mnt/c/Users/<MiUsuario>/Desktop/
+# PowerShell Admin:
+certutil -addstore -f "ROOT" C:\Users\<MiUsuario>\Desktop\rootCA.pem
+
+# 4.8 Permisos
+find /var/www/dulcehogar.local -perm 0777          # sin resultados
+sudo chown -R www-data:www-data /var/www/dulcehogar.local
+sudo find /var/www/dulcehogar.local -type d -exec chmod 755 {} \;
+sudo find /var/www/dulcehogar.local -type f -exec chmod 644 {} \;
+ls -la /var/www/dulcehogar.local
+
+# 4.9 Logs
+sudo tail -n 10 /var/log/apache2/dulcehogar.local-access.log
+sudo tail -n 10 /var/log/apache2/dulcehogar.local-error.log
+
+
+---------------------------------------------------------------------
+B. Interpretación del access.log
+---------------------------------------------------------------------
+Ejemplo de línea (formato "combined"):
+
+127.0.0.1 - - [24/Oct/2026:19:40:12 -0600] "GET /api/saludo?nombre=Wendy HTTP/1.1" 200 52 "-" "curl/8.5.0"
+
+  127.0.0.1                     IP del cliente que hizo la petición
+  - -                           identidad y usuario (no se usan)
+  [24/Oct/2026:19:40:12 -0600]  fecha y hora con zona horaria
+  "GET /api/saludo?... HTTP/1.1" método, ruta solicitada y protocolo
+  200                           código de estado (200 = OK; 301 = redirección;
+                                404 = no existe; 503 = backend caído)
+  52                            tamaño de la respuesta en bytes
+  "-"                           Referer (página de donde venía)
+  "curl/8.5.0"                  User-Agent (programa/navegador que pidió)
+
+En el log se ven: las peticiones a /api/saludo y /api/pedido con 200
+(el proxy funciona), peticiones al puerto 8085 con 301 (redirección a
+HTTPS) y la carga del index.html y de img/pastel.svg desde el navegador.
+
+
+---------------------------------------------------------------------
+C. Respuestas
+---------------------------------------------------------------------
+1. ¿Por qué certbot no funciona para dulcehogar.local?
+   Certbot pide el certificado a Let's Encrypt, que antes de emitirlo
+   verifica desde internet que el dominio es mío (reto HTTP o DNS).
+   ".local" no es un dominio público: no está registrado ni existe en
+   el DNS mundial, solo en mi archivo hosts, así que Let's Encrypt no
+   puede validarlo y además no emite certificados para dominios
+   internos.
+
+2. ¿Diferencia entre certificado autofirmado y uno firmado por mkcert?
+   El autofirmado se firma a sí mismo; el navegador no tiene forma de
+   confiar en él y siempre muestra la advertencia. mkcert crea primero
+   una autoridad certificadora (CA) local, la instala como raíz de
+   confianza en el sistema, y con ella firma el certificado del sitio.
+   Como el navegador confía en esa CA, confía en el certificado y no
+   muestra advertencia. Solo sirve en las máquinas donde se instaló
+   rootCA.pem.
+
+3. ¿Por qué chmod 777 sería una mala práctica?
+   777 da permiso de lectura, escritura y ejecución a cualquier usuario
+   del sistema. Si alguien explota una falla en Apache, Express u otro
+   servicio, podría modificar el index.html (defacement) o subir un
+   script malicioso. Lo correcto es 755 para carpetas y 644 para
+   archivos: el dueño (www-data) escribe y los demás solo leen. Las
+   llaves privadas van en 600 para que solo root pueda leerlas.
+
+4. Reto: si el dominio fuera dulcehogar.com.sv público:
+   - Herramienta: certbot (Let's Encrypt) en lugar de mkcert, con
+     renovación automática cada 90 días (certbot renew / timer).
+   - Puerto: usar los estándar 80 (HTTP, solo redirige) y 443 (HTTPS),
+     abiertos en el firewall (ufw allow 80,443/tcp), en vez de
+     8085/4443 que los usuarios tendrían que escribir en la URL.
+   - DNS: registrar el dominio en el NIC de El Salvador (.com.sv) y
+     crear un registro A apuntando a la IP pública del servidor
+     (y CNAME para www). Ya no se usa el archivo hosts.
+   - Además: Express escucharía en 127.0.0.1 del mismo servidor y el
+     ProxyPass usaría localhost, no la IP de Windows.
+
+
+---------------------------------------------------------------------
+D. Errores encontrados y solución
+---------------------------------------------------------------------
+- El navegador de Windows seguía mostrando "La conexión no es privada"
+  aunque curl en WSL funcionaba. Causa: mkcert -install solo instaló la
+  CA dentro de WSL2. Solución: copiar rootCA.pem a Windows e importarlo
+  con certutil en "Entidades de certificación raíz de confianza", y
+  cerrar/abrir el navegador. (Firefox usa su propio almacén: se importa
+  en Configuración > Certificados.)
+
+- Las peticiones HTTPS a /api/saludo no aparecían en
+  dulcehogar.local-access.log. Causa: el VHost SSL de la guía no tenía
+  ErrorLog/CustomLog, entonces Apache las guardaba en
+  other_vhosts_access.log. Solución: agregar ambas directivas al VHost
+  :4443.
+
+- "chmod -R 755" dejaba los archivos .html y .svg como ejecutables.
+  No es grave, pero un archivo web no necesita ejecución; se aplicó 755
+  solo a carpetas y 644 a archivos con find.
+
+- "Invalid command 'SSLEngine'" en configtest: faltaba a2enmod ssl.
