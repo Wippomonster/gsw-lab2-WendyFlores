@@ -1,0 +1,85 @@
+=====================================================================
+ LABORATORIO 2 - GESTIÓN DE SERVIDORES WEB
+ FASE 1 - DIMENSIONAMIENTO
+ Caso: "Dulce Hogar" - Repostería Artesanal
+ Estudiante: Wendy Yessenia Flores Reyes
+ Ciclo 02-2026 - Ing. Alberto Turcios Ortez
+=====================================================================
+
+Datos del servidor: 2 vCPU, 4 GB RAM, 40 GB SSD, Ubuntu Server LTS
+Tráfico: 500 visitas/día (normal), 3,000 visitas/día (días festivos)
+
+
+---------------------------------------------------------------------
+1. Promedio de peticiones por segundo y pico real
+---------------------------------------------------------------------
+Cálculo (día normal):
+   Peticiones/día   = 500 visitas x 5 peticiones = 2,500 peticiones/día
+   Segundos del día = 24 x 60 x 60 = 86,400 s
+   Promedio         = 2,500 / 86,400 = 0.029 peticiones/segundo
+   Pico (x15)       = 0.029 x 15 = 0.43 peticiones/segundo
+
+Cálculo extra (día festivo, 3,000 visitas):
+   Peticiones/día   = 3,000 x 5 = 15,000 peticiones/día
+   Promedio         = 15,000 / 86,400 = 0.17 peticiones/segundo
+   Pico (x15)       = 0.17 x 15 = 2.6 peticiones/segundo
+
+Justificación: el promedio sale muy bajo porque reparte las visitas en
+las 24 horas, pero la gente no compra pasteles a las 3 a.m. Por eso se
+usa el factor pico de 15: representa las horas de mayor movimiento.
+Incluso en el peor caso (festivo + hora pico) son menos de 3 peticiones
+por segundo, que es una carga baja para un servidor web.
+
+
+---------------------------------------------------------------------
+2. ¿Alcanzan 2 vCPU y 4 GB de RAM?
+---------------------------------------------------------------------
+Tráfico diario: Sí, sobra. Con 0.43 pet/s en el pico normal, Apache
+atiende cada petición en milisegundos y el CPU pasa casi todo el tiempo
+libre. Ubuntu Server + Apache + Node/Express consumen aproximadamente
+entre 300 y 600 MB de RAM, así que quedan más de 3 GB disponibles.
+
+Pico de 3,000 visitas: También alcanza. 2.6 pet/s es poco para Apache;
+aunque cada proceso de Apache usara unos 20-30 MB, con 50 procesos
+simultáneos serían ~1.5 GB, todavía dentro de los 4 GB. El único riesgo
+sería que las imágenes del catálogo fueran muy pesadas, pero eso se
+resuelve optimizándolas, no comprando más hardware.
+
+
+---------------------------------------------------------------------
+3. Si el sitio responde lento, ¿qué recurso reviso primero?
+---------------------------------------------------------------------
+Revisaría primero la RAM. Si se llena, Ubuntu empieza a usar swap
+(disco), y eso vuelve todo lento aunque el CPU esté desocupado. Además
+es lo más fácil de verificar con "free -h" y "htop". Si la RAM está
+bien, sigo con CPU (htop), luego disco (df -h, iostat) y por último la
+red. También revisaría el error.log de Apache, porque a veces la
+lentitud viene de que Express no responde y el proxy se queda esperando.
+
+
+---------------------------------------------------------------------
+4. Decisión personal: ¿nube o servidor local?
+---------------------------------------------------------------------
+Recomiendo la NUBE (un VPS pequeño) para Dulce Hogar:
+
+ - Costo: un VPS de 2 vCPU / 4 GB cuesta pocos dólares al mes, sin
+   comprar equipo, sin pagar electricidad ni internet con IP fija.
+   Para un negocio pequeño es más barato que un servidor físico.
+ - Escalabilidad: en festivos (Día de la Madre, Navidad) se puede
+   subir de plan por unos días y bajarlo después. Con un servidor
+   local habría que comprar hardware que el resto del año no se usa.
+ - Mantenimiento: el proveedor se encarga del hardware, la energía y
+   la conexión. La repostería no tiene personal técnico, así que no
+   le conviene preocuparse por apagones o discos dañados.
+
+
+---------------------------------------------------------------------
+5. Reto: si el sitio fuera solo HTML/CSS estático, ¿bajaría el CPU?
+---------------------------------------------------------------------
+Sí. Con contenido estático Apache solo lee el archivo del disco (o de
+la caché de memoria) y lo envía, sin ejecutar código. Con Express,
+cada petición a /api pasa por Apache, luego por el proxy hacia Node,
+que ejecuta JavaScript y arma el JSON, así que hay más procesamiento y
+un proceso más corriendo en memoria. Sin embargo se perdería la
+funcionalidad dinámica: no se podrían registrar pedidos, solo mostrar
+el catálogo.
