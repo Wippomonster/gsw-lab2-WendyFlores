@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dulce Hogar - Repostería Artesanal</title>
+  <style>
+    :root { --rosa: #f7b6c2; --cafe: #6b3f2a; --crema: #fdf1ec; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Georgia, "Times New Roman", serif; background: var(--crema); color: var(--cafe); line-height: 1.6; }
+    header { background: var(--cafe); color: #fff; padding: 2rem 1rem; text-align: center; }
+    header h1 { font-size: 2.4rem; }
+    header p { opacity: .85; }
+    main { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+    .hero { display: flex; gap: 2rem; align-items: center; flex-wrap: wrap; margin-bottom: 2.5rem; }
+    .hero img { width: 200px; height: 200px; }
+    .hero div { flex: 1; min-width: 240px; }
+    h2 { margin-bottom: .8rem; border-bottom: 3px solid var(--rosa); display: inline-block; }
+    .catalogo { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
+    .producto { background: #fff; border-radius: 12px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .producto h3 { margin-bottom: .3rem; }
+    .precio { font-weight: bold; color: #c0587a; }
+    .pedido { background: #fff; border-radius: 12px; padding: 1.5rem; margin-bottom: 2.5rem; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .pedido label { display: block; margin: .6rem 0 .2rem; }
+    .pedido select, .pedido input { padding: .5rem; width: 100%; max-width: 300px; border: 1px solid #ccc; border-radius: 6px; }
+    .pedido button { margin-top: 1rem; padding: .6rem 1.4rem; background: var(--cafe); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; }
+    pre { background: #2b2b2b; color: #a8e6a1; padding: 1rem; border-radius: 8px; margin-top: 1rem; overflow-x: auto; white-space: pre-wrap; }
+    footer { text-align: center; padding: 1.5rem; background: var(--rosa); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Dulce Hogar</h1>
+    <p>Repostería artesanal salvadoreña · Pasteles y postres hechos en casa</p>
+  </header>
+
+  <main>
+    <section class="hero">
+      <img src="img/pastel.svg" alt="Ilustración de un pastel con velas">
+      <div>
+        <h2>Bienvenidos</h2>
+        <p>Antes vendíamos solo por WhatsApp; ahora puedes ver nuestro catálogo
+           y reservar tu pedido desde aquí.</p>
+        <p><strong>Sitio administrado por: Wendy Yessenia Flores Reyes</strong></p>
+        <p>Servidor: Apache 2 · Dominio local <code>dulcehogar.local</code></p>
+      </div>
+    </section>
+
+    <h2>Catálogo</h2>
+    <section class="catalogo">
+      <article class="producto">
+        <h3>Pastel de tres leches</h3>
+        <p>El clásico, húmedo y con merengue.</p>
+        <p class="precio">$18.00</p>
+      </article>
+      <article class="producto">
+        <h3>Quesadilla salvadoreña</h3>
+        <p>Receta tradicional con queso duro y ajonjolí.</p>
+        <p class="precio">$6.50</p>
+      </article>
+      <article class="producto">
+        <h3>Pastel de chocolate</h3>
+        <p>Bizcocho de cacao con ganache.</p>
+        <p class="precio">$22.00</p>
+      </article>
+      <article class="producto">
+        <h3>Torta de semita</h3>
+        <p>Semita alta rellena de piña.</p>
+        <p class="precio">$8.00</p>
+      </article>
+    </section>
+
+    <section class="pedido">
+      <h2>Reserva tu pedido</h2>
+      <p>Esta sección usa la API Express (<code>/api/pedido</code>) a través del reverse proxy de Apache.</p>
+      <label for="producto">Producto</label>
+      <select id="producto">
+        <option value="pastel-tres-leches">Pastel de tres leches</option>
+        <option value="quesadilla">Quesadilla salvadoreña</option>
+        <option value="pastel-chocolate">Pastel de chocolate</option>
+        <option value="torta-semita">Torta de semita</option>
+      </select>
+      <label for="cantidad">Cantidad</label>
+      <input id="cantidad" type="number" min="1" value="1">
+      <br>
+      <button id="btnPedido">Reservar</button>
+      <pre id="respuesta">La respuesta del servidor aparecerá aquí.</pre>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Dulce Hogar · Laboratorio 2 GSW · Wendy Yessenia Flores Reyes</p>
+  </footer>
+
+  <script>
+    document.getElementById('btnPedido').addEventListener('click', async () => {
+      const producto = document.getElementById('producto').value;
+      const cantidad = document.getElementById('cantidad').value;
+      const salida = document.getElementById('respuesta');
+      try {
+        const r = await fetch(`/api/pedido?producto=${encodeURIComponent(producto)}&cantidad=${encodeURIComponent(cantidad)}`);
+        const data = await r.json();
+        salida.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        salida.textContent = 'No se pudo contactar la API: ' + e.message;
+      }
+    });
+  </script>
+</body>
+</html>

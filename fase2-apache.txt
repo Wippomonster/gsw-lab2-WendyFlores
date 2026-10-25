@@ -1,0 +1,90 @@
+=====================================================================
+ LABORATORIO 2 - GESTIÓN DE SERVIDORES WEB
+ FASE 2 - APACHE + VIRTUAL HOST
+ Estudiante: Wendy Yessenia Flores Reyes
+ Entorno: Windows 11 + WSL2 (Ubuntu LTS)
+=====================================================================
+
+---------------------------------------------------------------------
+A. Comandos ejecutados
+---------------------------------------------------------------------
+# Instalación
+sudo apt update
+sudo apt install -y apache2
+sudo systemctl status apache2      # (en WSL2 sin systemd: sudo service apache2 status)
+sudo systemctl enable apache2
+curl http://localhost              # Devuelve la página "Apache2 Ubuntu Default Page"
+
+# 2.1 Puerto 8085 -> se agregó "Listen 8085" en /etc/apache2/ports.conf
+
+# 2.2 Contenido del sitio
+sudo mkdir -p /var/www/dulcehogar.local/img
+sudo cp codigo/index.html /var/www/dulcehogar.local/
+sudo cp codigo/img/pastel.svg /var/www/dulcehogar.local/img/
+sudo chown -R www-data:www-data /var/www/dulcehogar.local
+
+# 2.3 Virtual Host (versión de la Fase 2):
+#   /etc/apache2/sites-available/dulcehogar.local.conf
+#
+#   <VirtualHost *:8085>
+#       ServerName dulcehogar.local
+#       DocumentRoot /var/www/dulcehogar.local
+#       <Directory /var/www/dulcehogar.local>
+#           AllowOverride All
+#           Require all granted
+#       </Directory>
+#       ErrorLog ${APACHE_LOG_DIR}/dulcehogar.local-error.log
+#       CustomLog ${APACHE_LOG_DIR}/dulcehogar.local-access.log combined
+#   </VirtualHost>
+
+# 2.4 Activar y probar
+sudo a2ensite dulcehogar.local.conf
+sudo apache2ctl configtest         # Syntax OK
+sudo systemctl reload apache2
+echo "127.0.0.1 dulcehogar.local" | sudo tee -a /etc/hosts
+curl http://dulcehogar.local:8085  # Devuelve el HTML de Dulce Hogar
+
+# Para abrirlo desde el navegador de Windows también se agregó
+#   127.0.0.1 dulcehogar.local
+# en C:\Windows\System32\drivers\etc\hosts (Bloc de notas como administrador).
+
+
+---------------------------------------------------------------------
+B. Respuestas
+---------------------------------------------------------------------
+1. ¿Diferencia entre sites-available y sites-enabled?
+   sites-available guarda TODAS las configuraciones de sitios que
+   existen, estén activas o no. sites-enabled solo contiene enlaces
+   simbólicos a los sitios que Apache realmente carga. a2ensite crea
+   ese enlace y a2dissite lo borra, así se puede apagar un sitio sin
+   eliminar su archivo de configuración.
+
+2. ¿Por qué configtest antes de reload?
+   Porque configtest revisa la sintaxis sin tocar el servicio. Si hay
+   un error (una directiva mal escrita, un módulo no cargado) y se hace
+   reload directamente, Apache puede no levantar y el sitio queda caído.
+   Con configtest el error se ve y se corrige antes de afectar a los
+   usuarios.
+
+3. Reto: el HTML contiene mi nombre y una imagen local (img/pastel.svg).
+   Ver captura capturas/fase2-apache-sitio.png
+
+
+---------------------------------------------------------------------
+C. Errores encontrados y solución
+---------------------------------------------------------------------
+- "System has not been booted with systemd as init system": WSL2 no
+  tenía systemd activo. Solución: usar "sudo service apache2 start"
+  o activar systemd agregando en /etc/wsl.conf:
+      [boot]
+      systemd=true
+  y luego "wsl --shutdown" desde PowerShell.
+
+- El navegador de Windows no abría http://dulcehogar.local:8085 aunque
+  curl en WSL sí funcionaba. Causa: el /etc/hosts de WSL no lo usa
+  Windows. Solución: agregar "127.0.0.1 dulcehogar.local" al archivo
+  hosts de Windows.
+
+- AH00558 "Could not reliably determine the server's fully qualified
+  domain name": es solo una advertencia. Se quitó agregando
+  "ServerName localhost" en /etc/apache2/apache2.conf.
